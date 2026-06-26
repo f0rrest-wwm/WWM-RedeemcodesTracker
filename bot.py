@@ -1,4 +1,6 @@
 
+
+
 # Full updated bot.py with channel setup
 import discord
 from discord.ext import commands
@@ -44,7 +46,14 @@ class SetupView(discord.ui.View):
     async def pick(self,i,s):
         ch=s.values[0]
         cursor.execute("INSERT OR REPLACE INTO guild_settings VALUES(?,?)",(str(i.guild.id),str(ch.id))); conn.commit()
-        await i.response.edit_message(content=f"✅ Bot channel set to {ch.mention}",view=None)
+        await i.response.edit_message(
+    content=(
+        f"✅ **Setup Complete!**\n\n"
+        f"Redeem codes will now be posted in {ch.mention}.\n\n"
+        f"You can now use **/addcode**."
+    ),
+    view=None
+)
 
 @bot.event
 async def on_ready():
@@ -52,17 +61,7 @@ async def on_ready():
     await bot.tree.sync()
     print(f"Logged in as {bot.user}")
 
-@bot.tree.command(
-    name="setchannel",
-    description="Choose the channel for redeem codes"
-)
-@checks.has_permissions(administrator=True)
-async def setchannel(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        "Choose the channel for redeem codes:",
-        view=SetupView(),
-        ephemeral=True
-    )
+
 
 def get_channel(guild):
     cursor.execute("SELECT channel_id FROM guild_settings WHERE guild_id=?",(str(guild.id),))
@@ -71,12 +70,24 @@ def get_channel(guild):
 
 @bot.tree.command(description="Add one or more codes")
 async def addcode(interaction:discord.Interaction,codes:str):
-    channel=get_channel(interaction.guild)
-    if not channel:
-        return await interaction.response.send_message(
-    "⚠️ Please run **/setchannel** first to choose where redeem codes should be posted.",
-    ephemeral=True
-)
+    channel = get_channel(interaction.guild)
+
+if not channel:
+
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(
+            "⚠️ An administrator must configure the bot before codes can be posted.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.send_message(
+        "🎯 First-time setup!\n\n"
+        "Please choose which channel redeem codes should be posted to.",
+        view=SetupView(),
+        ephemeral=True
+    )
+    return
     added=[]
     for code in [c.strip().upper() for c in codes.replace(",","\n").split("\n") if c.strip()]:
         cursor.execute("SELECT code FROM codes WHERE code=?",(code,))
