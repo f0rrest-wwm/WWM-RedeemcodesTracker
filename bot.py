@@ -69,33 +69,58 @@ def get_channel(guild):
     return guild.get_channel(int(r[0])) if r else None
 
 @bot.tree.command(description="Add one or more codes")
-async def addcode(interaction:discord.Interaction,codes:str):
+@checks.has_permissions(manage_guild=True)
+async def addcode(interaction: discord.Interaction, codes: str):
+
     channel = get_channel(interaction.guild)
 
-if not channel:
+    # First-time setup
+    if channel is None:
 
-    if not interaction.user.guild_permissions.administrator:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "⚠️ An administrator must configure the bot first.",
+                ephemeral=True
+            )
+            return
+
         await interaction.response.send_message(
-            "⚠️ An administrator must configure the bot before codes can be posted.",
+            "🎯 **First-time setup!**\n\n"
+            "Please choose the channel where redeem codes should be posted.",
+            view=SetupView(),
             ephemeral=True
         )
         return
 
+    added = []
+
+    for code in [c.strip().upper() for c in codes.replace(",", "\n").split("\n") if c.strip()]:
+
+        cursor.execute("SELECT code FROM codes WHERE code=?", (code,))
+        if cursor.fetchone():
+            continue
+
+        cursor.execute(
+            "INSERT INTO codes VALUES (?, ?, ?)",
+            (
+                code,
+                interaction.user.name,
+                datetime.now().isoformat()
+            )
+        )
+        conn.commit()
+
+        await channel.send(
+            f"## ✅ New Redeem Code\n`{code}`",
+            view=CodeView(code)
+        )
+
+        added.append(code)
+
     await interaction.response.send_message(
-        "🎯 First-time setup!\n\n"
-        "Please choose which channel redeem codes should be posted to.",
-        view=SetupView(),
+        f"✅ Added {len(added)} code(s).",
         ephemeral=True
     )
-    return
-    added=[]
-    for code in [c.strip().upper() for c in codes.replace(",","\n").split("\n") if c.strip()]:
-        cursor.execute("SELECT code FROM codes WHERE code=?",(code,))
-        if cursor.fetchone(): continue
-        cursor.execute("INSERT INTO codes VALUES(?,?,?)",(code,interaction.user.name,datetime.now().isoformat())); conn.commit()
-        await channel.send(f"## ✅ New Redeem Code\n`{code}`",view=CodeView(code))
-        added.append(code)
-    await interaction.response.send_message(f"Added {len(added)} code(s).",ephemeral=True)
 
 @bot.tree.command()
 async def allcodes(interaction):
